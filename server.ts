@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { createServer as createViteServer } from 'vite';
-import { getSupabase } from './src/lib/supabase';
+import { getSupabase, getAdminSupabase } from './src/lib/supabase';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -172,11 +172,13 @@ async function startServer() {
 
       // 3. Make slot available again
       // We use service role here because RLS might prevent a client from updating a slot directly
-      const adminSupabase = getSupabase();
-      await adminSupabase
-        .from('slots')
-        .update({ status: 'available' })
-        .eq('id', booking.slot_id);
+      const adminSupabase = getAdminSupabase();
+      if (adminSupabase) {
+        await adminSupabase
+          .from('slots')
+          .update({ status: 'available' })
+          .eq('id', booking.slot_id);
+      }
 
       return res.json({ message: 'Reserva cancelada com sucesso' });
     } catch (err: any) {
@@ -338,11 +340,13 @@ async function startServer() {
 
       // 2. Update slot
       // Use service role to update slot status to completed
-      const adminSupabase = getSupabase();
-      await adminSupabase
-        .from('slots')
-        .update({ status: 'completed' })
-        .eq('id', booking.slot_id);
+      const adminSupabase = getAdminSupabase();
+      if (adminSupabase) {
+        await adminSupabase
+          .from('slots')
+          .update({ status: 'completed' })
+          .eq('id', booking.slot_id);
+      }
 
       return res.json({ message: is_no_show ? 'No-show registrado' : 'Atendimento finalizado' });
     } catch (err: any) {

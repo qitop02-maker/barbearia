@@ -73,24 +73,50 @@ ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public profiles are viewable by everyone" ON profiles
   FOR SELECT USING (true);
 
-CREATE POLICY "Users can update own profile" ON profiles
-  FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Users can update own profile except role" ON profiles
+  FOR UPDATE USING (auth.uid() = id)
+  WITH CHECK (
+    auth.uid() = id AND 
+    role = (SELECT role FROM profiles WHERE id = auth.uid()) -- Prevent role change
+  );
 
 -- Barbershops Policies
 CREATE POLICY "Barbershops are viewable by everyone" ON barbershops
   FOR SELECT USING (true);
 
-CREATE POLICY "Owners can manage their barbershops" ON barbershops
-  FOR ALL USING (auth.uid() = owner_id);
+CREATE POLICY "Users can create their own barbershop" ON barbershops
+  FOR INSERT WITH CHECK (auth.uid() = owner_id);
+
+CREATE POLICY "Owners can update their barbershops" ON barbershops
+  FOR UPDATE USING (auth.uid() = owner_id);
+
+CREATE POLICY "Owners can delete their barbershops" ON barbershops
+  FOR DELETE USING (auth.uid() = owner_id);
 
 -- Slots Policies
 CREATE POLICY "Available slots are viewable by everyone" ON slots
-  FOR SELECT USING (status = 'available' OR auth.uid() IN (
-    SELECT owner_id FROM barbershops WHERE id = slots.barbershop_id
+  FOR SELECT USING (status = 'available' OR EXISTS (
+    SELECT 1 FROM barbershops WHERE id = slots.barbershop_id AND owner_id = auth.uid()
   ));
 
-CREATE POLICY "Barbershops can manage their slots" ON slots
-  FOR ALL USING (
+CREATE POLICY "Barbershops can create slots" ON slots
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM barbershops 
+      WHERE id = barbershop_id AND owner_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Barbershops can update their slots" ON slots
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM barbershops 
+      WHERE id = slots.barbershop_id AND owner_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Barbershops can delete their slots" ON slots
+  FOR DELETE USING (
     EXISTS (
       SELECT 1 FROM barbershops 
       WHERE id = slots.barbershop_id AND owner_id = auth.uid()
@@ -113,9 +139,12 @@ CREATE POLICY "Barbershops can view bookings for their slots" ON bookings
 CREATE POLICY "Clients can create bookings" ON bookings
   FOR INSERT WITH CHECK (auth.uid() = client_id);
 
-CREATE POLICY "Users can update their own bookings" ON bookings
+CREATE POLICY "Clients can cancel their own pending bookings" ON bookings
+  FOR UPDATE USING (auth.uid() = client_id)
+  WITH CHECK (auth.uid() = client_id AND status = 'cancelled');
+
+CREATE POLICY "Barbershops can manage bookings for their slots" ON bookings
   FOR UPDATE USING (
-    auth.uid() = client_id OR 
     EXISTS (
       SELECT 1 FROM slots
       JOIN barbershops ON slots.barbershop_id = barbershops.id
@@ -131,7 +160,7 @@ BEGIN
   VALUES (new.id, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'avatar_url', 'client');
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
@@ -172,4 +201,4 @@ BEGIN
 
   RETURN v_booking_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
