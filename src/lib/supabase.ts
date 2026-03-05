@@ -6,9 +6,21 @@ const isBrowser = typeof window !== 'undefined';
 let supabaseClient: SupabaseClient | null = null;
 
 export function isSupabaseConfigured() {
-  const url = import.meta.env?.VITE_SUPABASE_URL || process.env?.VITE_SUPABASE_URL || '';
-  const key = import.meta.env?.VITE_SUPABASE_ANON_KEY || process.env?.VITE_SUPABASE_ANON_KEY || '';
-  return Boolean(url && key);
+  const url = import.meta.env?.VITE_SUPABASE_URL || (isBrowser && (window as any).process?.env?.VITE_SUPABASE_URL);
+  const key = import.meta.env?.VITE_SUPABASE_ANON_KEY || (isBrowser && (window as any).process?.env?.VITE_SUPABASE_ANON_KEY);
+  
+  const isConfigured = Boolean(url && key);
+  
+  if (!isConfigured && isBrowser) {
+    console.warn('Supabase configuration check:', {
+      hasUrl: !!url,
+      hasKey: !!key,
+      urlValue: url ? 'Present' : 'Missing',
+      keyValue: key ? 'Present' : 'Missing'
+    });
+  }
+  
+  return isConfigured;
 }
 
 export function getSupabase(accessToken?: string) {
