@@ -1,0 +1,7 @@
+{
+  "name": "BarberNow",
+  "description": "SaaS platform connecting barbershops with last-minute cancellations to clients looking for immediate discounts.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
