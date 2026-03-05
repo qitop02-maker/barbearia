@@ -15,6 +15,9 @@ export const ShopDashboard: React.FC = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [newShopName, setNewShopName] = useState('');
+  const [newShopAddress, setNewShopAddress] = useState('');
+  const [newShopCity, setNewShopCity] = useState('');
 
   // Form state
   const [startTime, setStartTime] = useState('');
@@ -122,11 +125,96 @@ export const ShopDashboard: React.FC = () => {
     }
   };
 
+  const handleCreateShop = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !session) return;
+
+    try {
+      const { getSupabase } = await import('../lib/supabase');
+      const supabase = getSupabase(session.access_token);
+      if (!supabase) return;
+
+      const { data, error } = await supabase
+        .from('barbershops')
+        .insert([{
+          owner_id: user.id,
+          name: newShopName,
+          address: newShopAddress,
+          city: newShopCity,
+          is_verified: false
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      setShop(data);
+      alert('Barbearia cadastrada com sucesso!');
+    } catch (error: any) {
+      alert(error.message || 'Erro ao cadastrar barbearia');
+    }
+  };
+
   if (authLoading || loading) return (
     <div className="flex items-center justify-center h-[80vh]">
       <div className="w-8 h-8 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
     </div>
   );
+
+  if (!shop) {
+    return (
+      <div className="max-w-md mx-auto px-6 py-12">
+        <div className="text-center mb-10">
+          <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600 mx-auto mb-6 shadow-xl shadow-emerald-50">
+            <Scissors size={32} />
+          </div>
+          <h1 className="text-3xl font-black text-zinc-900 mb-2">Configure sua Barbearia</h1>
+          <p className="text-zinc-500 text-sm">Você precisa cadastrar sua barbearia para começar a publicar vagas.</p>
+        </div>
+
+        <form onSubmit={handleCreateShop} className="space-y-6 bg-white border border-zinc-100 rounded-3xl p-6 shadow-sm">
+          <div>
+            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2 block">Nome da Barbearia</label>
+            <input 
+              type="text" 
+              required
+              placeholder="Ex: Barbearia do Zé"
+              value={newShopName}
+              onChange={(e) => setNewShopName(e.target.value)}
+              className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl py-4 px-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2 block">Endereço</label>
+            <input 
+              type="text" 
+              required
+              placeholder="Rua Exemplo, 123"
+              value={newShopAddress}
+              onChange={(e) => setNewShopAddress(e.target.value)}
+              className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl py-4 px-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2 block">Cidade</label>
+            <input 
+              type="text" 
+              required
+              placeholder="São Paulo"
+              value={newShopCity}
+              onChange={(e) => setNewShopCity(e.target.value)}
+              className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl py-4 px-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+            />
+          </div>
+          <button 
+            type="submit"
+            className="w-full bg-zinc-900 text-white font-black py-4 rounded-2xl shadow-xl shadow-zinc-200 active:scale-[0.98] transition-all"
+          >
+            Cadastrar Barbearia
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-md mx-auto px-4 py-8 pb-32">
