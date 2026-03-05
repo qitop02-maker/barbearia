@@ -6,17 +6,24 @@ const isBrowser = typeof window !== 'undefined';
 let supabaseClient: SupabaseClient | null = null;
 
 export function getSupabase(accessToken?: string) {
-  const supabaseUrl = isBrowser 
-    ? (import.meta.env.VITE_SUPABASE_URL || '') 
-    : (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '');
+  // Try to get from Vite's import.meta.env or fallback to process.env (for server-side or shimmed environments)
+  const supabaseUrl = 
+    import.meta.env?.VITE_SUPABASE_URL || 
+    process.env?.VITE_SUPABASE_URL || 
+    process.env?.SUPABASE_URL || 
+    '';
     
-  const supabaseKey = isBrowser
-    ? (import.meta.env.VITE_SUPABASE_ANON_KEY || '')
-    : (accessToken ? (process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY) : '');
+  const supabaseKey = 
+    import.meta.env?.VITE_SUPABASE_ANON_KEY || 
+    process.env?.VITE_SUPABASE_ANON_KEY || 
+    process.env?.SUPABASE_ANON_KEY || 
+    '';
 
-  if (!supabaseUrl || (!supabaseKey && isBrowser)) {
+  if (!supabaseUrl || !supabaseKey) {
     const errorMsg = '⚠️ Supabase environment variables are missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.';
-    if (isBrowser) console.error(errorMsg);
+    if (isBrowser) {
+      console.error(errorMsg);
+    }
     return null as any;
   }
 
@@ -28,7 +35,7 @@ export function getSupabase(accessToken?: string) {
     },
   } : {};
 
-  return createClient(supabaseUrl, supabaseKey || (process.env.SUPABASE_ANON_KEY || ''), options);
+  return createClient(supabaseUrl, supabaseKey, options);
 }
 
 /**
