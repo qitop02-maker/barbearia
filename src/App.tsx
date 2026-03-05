@@ -19,9 +19,18 @@ const ConfigMissingBanner = () => {
   const [diagnostics, setDiagnostics] = React.useState<{ hasUrl: boolean; hasKey: boolean } | null>(null);
 
   React.useEffect(() => {
+    // Check multiple possible locations for the variables
+    const url = import.meta.env.VITE_SUPABASE_URL || 
+                (window as any).process?.env?.VITE_SUPABASE_URL ||
+                (window as any).VITE_SUPABASE_URL;
+                
+    const key = import.meta.env.VITE_SUPABASE_ANON_KEY || 
+                (window as any).process?.env?.VITE_SUPABASE_ANON_KEY ||
+                (window as any).VITE_SUPABASE_ANON_KEY;
+
     setDiagnostics({
-      hasUrl: !!import.meta.env.VITE_SUPABASE_URL || !!(window as any).process?.env?.VITE_SUPABASE_URL,
-      hasKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY || !!(window as any).process?.env?.VITE_SUPABASE_ANON_KEY
+      hasUrl: !!url,
+      hasKey: !!key
     });
   }, []);
 
@@ -35,12 +44,15 @@ const ConfigMissingBanner = () => {
             <p className="opacity-90">
               Detectado: {diagnostics?.hasUrl ? '✅ URL' : '❌ URL'} | {diagnostics?.hasKey ? '✅ Chave' : '❌ Chave'}
             </p>
+            <p className="text-[10px] mt-1 opacity-75">
+              Dica: Verifique se os nomes no painel de ambiente estão em MAIÚSCULAS e com o prefixo VITE_.
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <button 
             onClick={() => window.location.reload()}
-            className="text-xs font-bold text-red-700 hover:underline bg-white/50 px-3 py-1.5 rounded-md border border-red-200"
+            className="text-xs font-bold text-red-700 hover:underline bg-white/50 px-3 py-1.5 rounded-md border border-red-200 shadow-sm active:scale-95 transition-transform"
           >
             Já configurei, recarregar
           </button>
