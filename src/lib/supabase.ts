@@ -5,6 +5,12 @@ const isBrowser = typeof window !== 'undefined';
 
 let supabaseClient: SupabaseClient | null = null;
 
+export function isSupabaseConfigured() {
+  const url = import.meta.env?.VITE_SUPABASE_URL || process.env?.VITE_SUPABASE_URL || '';
+  const key = import.meta.env?.VITE_SUPABASE_ANON_KEY || process.env?.VITE_SUPABASE_ANON_KEY || '';
+  return Boolean(url && key);
+}
+
 export function getSupabase(accessToken?: string) {
   // Try to get from Vite's import.meta.env or fallback to process.env (for server-side or shimmed environments)
   const supabaseUrl = 
