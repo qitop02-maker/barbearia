@@ -1,9 +1,34 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { createServer as createViteServer } from 'vite';
 import { getSupabase } from './src/lib/supabase';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+// Middleware to verify Supabase JWT
+const verifyAuth = async (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ error: 'No authorization header' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const supabase = getSupabase();
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    // Attach user and token to request
+    (req as any).user = user;
+    (req as any).token = token;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Auth failed' });
+  }
+};
 
 async function startServer() {
   const app = express();
@@ -17,11 +42,13 @@ async function startServer() {
    * 1) Criar vaga disponível (Barbearia)
    * POST /api/slots/create
    */
-  app.post('/api/slots/create', async (req: Request, res: Response) => {
+  app.post('/api/slots/create', verifyAuth, async (req: Request, res: Response) => {
     try {
-      const supabase = getSupabase();
-      const { barbershop_id, start_time, end_time, original_price, discounted_price, service_name } = req.body;
+      const token = (req as any).token;
+      const supabase = getSupabase(token);
+      const { barbershop_id, start_time, end_time, original_price, discounted_price } = req.body;
 
+      // RLS will ensure the user owns the barbershop
       const { data, error } = await supabase
         .from('slots')
         .insert([
@@ -44,13 +71,13 @@ async function startServer() {
   });
 
   /**
-   * 2) Listar vagas abertas (Cliente)
+   * 2) Listar vagas abertas (Cliente) - Public
    * GET /api/slots
    */
   app.get('/api/slots', async (req: Request, res: Response) => {
     try {
       const supabase = getSupabase();
-      const { city, service, min_discount } = req.query;
+      const { city, min_discount } = req.query;
 
       let query = supabase
         .from('slots')
@@ -92,36 +119,21 @@ async function startServer() {
    * 3) Reservar vaga (Cliente)
    * POST /api/reservations/create
    */
-  app.post('/api/reservations/create', async (req: Request, res: Response) => {
+  app.post('/api/reservations/create', verifyAuth, async (req: Request, res: Response) => {
     try {
-      const supabase = getSupabase();
-      const { slot_id, client_id } = req.body;
+      const token = (req as any).token;
+      const supabase = getSupabase(token);
+      const { slot_id } = req.body;
 
-      // 1. Check if slot is still available
-      const { data: slot, error: slotError } = await supabase
-        .from('slots')
-        .select('status')
-        .eq('id', slot_id)
-        .single();
+      // Use the atomic RPC function to prevent race conditions
+      // Now it uses auth.uid() internally, so we don't pass p_client_id
+      const { data: bookingId, error } = await supabase.rpc('book_slot', {
+        p_slot_id: slot_id
+      });
 
-      if (slotError || !slot) return res.status(404).json({ error: 'Vaga não encontrada' });
-      if (slot.status !== 'available') return res.status(400).json({ error: 'Vaga já reservada ou indisponível' });
+      if (error) return res.status(400).json({ error: error.message });
 
-      // 2. Create booking and update slot status
-      const { data: booking, error: bookingError } = await supabase
-        .from('bookings')
-        .insert([{ slot_id, client_id, status: 'pending' }])
-        .select()
-        .single();
-
-      if (bookingError) return res.status(400).json({ error: bookingError.message });
-
-      await supabase
-        .from('slots')
-        .update({ status: 'booked' })
-        .eq('id', slot_id);
-
-      return res.status(201).json(booking);
+      return res.status(201).json({ id: bookingId });
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
@@ -131,20 +143,22 @@ async function startServer() {
    * 4) Cancelar reserva
    * POST /api/reservations/cancel
    */
-  app.post('/api/reservations/cancel', async (req: Request, res: Response) => {
+  app.post('/api/reservations/cancel', verifyAuth, async (req: Request, res: Response) => {
     try {
-      const supabase = getSupabase();
+      const token = (req as any).token;
+      const supabase = getSupabase(token);
       const { booking_id } = req.body;
 
+      // 1. Get the booking to find the slot_id
       const { data: booking, error: fetchError } = await supabase
         .from('bookings')
         .select('slot_id')
         .eq('id', booking_id)
         .single();
 
-      if (fetchError || !booking) return res.status(404).json({ error: 'Reserva não encontrada' });
+      if (fetchError || !booking) return res.status(404).json({ error: 'Reserva não encontrada ou sem permissão' });
 
-      // Update booking status
+      // 2. Update booking status
       const { error: updateError } = await supabase
         .from('bookings')
         .update({ status: 'cancelled' })
@@ -152,8 +166,10 @@ async function startServer() {
 
       if (updateError) return res.status(400).json({ error: updateError.message });
 
-      // Make slot available again
-      await supabase
+      // 3. Make slot available again
+      // We use service role here because RLS might prevent a client from updating a slot directly
+      const adminSupabase = getSupabase();
+      await adminSupabase
         .from('slots')
         .update({ status: 'available' })
         .eq('id', booking.slot_id);
@@ -168,9 +184,10 @@ async function startServer() {
    * 5) Check-in do cliente (Barbearia)
    * POST /api/reservations/checkin
    */
-  app.post('/api/reservations/checkin', async (req: Request, res: Response) => {
+  app.post('/api/reservations/checkin', verifyAuth, async (req: Request, res: Response) => {
     try {
-      const supabase = getSupabase();
+      const token = (req as any).token;
+      const supabase = getSupabase(token);
       const { booking_id } = req.body;
 
       const { error } = await supabase
@@ -189,9 +206,10 @@ async function startServer() {
    * 6) Finalizar atendimento / Marcar No-show
    * POST /api/reservations/complete
    */
-  app.post('/api/reservations/complete', async (req: Request, res: Response) => {
+  app.post('/api/reservations/complete', verifyAuth, async (req: Request, res: Response) => {
     try {
-      const supabase = getSupabase();
+      const token = (req as any).token;
+      const supabase = getSupabase(token);
       const { booking_id, is_no_show } = req.body;
 
       const status = is_no_show ? 'cancelled' : 'completed';
@@ -207,7 +225,9 @@ async function startServer() {
       if (bookingError) return res.status(400).json({ error: bookingError.message });
 
       // 2. Update slot
-      await supabase
+      // Use service role to update slot status to completed
+      const adminSupabase = getSupabase();
+      await adminSupabase
         .from('slots')
         .update({ status: 'completed' })
         .eq('id', booking.slot_id);

@@ -135,3 +135,40 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- 9. Atomic Booking Function (Prevents Race Conditions)
+CREATE OR REPLACE FUNCTION book_slot(p_slot_id UUID)
+RETURNS UUID AS $$
+DECLARE
+  v_booking_id UUID;
+  v_client_id UUID;
+BEGIN
+  -- Get the current user ID
+  v_client_id := auth.uid();
+  
+  IF v_client_id IS NULL THEN
+    RAISE EXCEPTION 'Usuário não autenticado';
+  END IF;
+
+  -- 1. Lock the slot for update to prevent concurrent bookings
+  IF NOT EXISTS (
+    SELECT 1 FROM slots 
+    WHERE id = p_slot_id AND status = 'available' 
+    FOR UPDATE
+  ) THEN
+    RAISE EXCEPTION 'Vaga já reservada ou indisponível';
+  END IF;
+
+  -- 2. Create the booking
+  INSERT INTO bookings (slot_id, client_id, status)
+  VALUES (p_slot_id, v_client_id, 'pending')
+  RETURNING id INTO v_booking_id;
+
+  -- 3. Update the slot status
+  UPDATE slots 
+  SET status = 'booked' 
+  WHERE id = p_slot_id;
+
+  RETURN v_booking_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
