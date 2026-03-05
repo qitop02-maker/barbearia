@@ -15,6 +15,9 @@ const verifyAuth = async (req: Request, res: Response, next: NextFunction) => {
   const token = authHeader.split(' ')[1];
   try {
     const supabase = getSupabase();
+    if (!supabase) {
+      return res.status(500).json({ error: 'Supabase configuration missing on server' });
+    }
     const { data: { user }, error } = await supabase.auth.getUser(token);
     
     if (error || !user) {
@@ -46,7 +49,7 @@ async function startServer() {
     try {
       const token = (req as any).token;
       const supabase = getSupabase(token);
-      const { barbershop_id, start_time, end_time, original_price, discounted_price } = req.body;
+      const { barbershop_id, service_name, start_time, end_time, original_price, discounted_price } = req.body;
 
       // RLS will ensure the user owns the barbershop
       const { data, error } = await supabase
@@ -54,6 +57,7 @@ async function startServer() {
         .insert([
           { 
             barbershop_id, 
+            service_name,
             start_time, 
             end_time, 
             original_price, 
@@ -203,7 +207,115 @@ async function startServer() {
   });
 
   /**
-   * 6) Finalizar atendimento / Marcar No-show
+   * 7) Listar reservas do cliente
+   * GET /api/reservations/client
+   */
+  app.get('/api/reservations/client', verifyAuth, async (req: Request, res: Response) => {
+    try {
+      const token = (req as any).token;
+      const user = (req as any).user;
+      const supabase = getSupabase(token);
+
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          slots (
+            *,
+            barbershops (
+              name,
+              address,
+              city,
+              logo_url
+            )
+          )
+        `)
+        .eq('client_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) return res.status(400).json({ error: error.message });
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
+   * 8) Listar reservas da barbearia
+   * GET /api/reservations/shop
+   */
+  app.get('/api/reservations/shop', verifyAuth, async (req: Request, res: Response) => {
+    try {
+      const token = (req as any).token;
+      const user = (req as any).user;
+      const supabase = getSupabase(token);
+
+      // 1. Get the barbershop owned by the user
+      const { data: shop, error: shopError } = await supabase
+        .from('barbershops')
+        .select('id')
+        .eq('owner_id', user.id)
+        .single();
+
+      if (shopError || !shop) return res.status(404).json({ error: 'Barbearia não encontrada' });
+
+      // 2. Get bookings for slots of this barbershop
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          slots!inner (
+            *
+          ),
+          profiles:client_id (
+            full_name,
+            avatar_url
+          )
+        `)
+        .eq('slots.barbershop_id', shop.id)
+        .order('created_at', { ascending: false });
+
+      if (error) return res.status(400).json({ error: error.message });
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
+   * 9) Listar vagas da barbearia
+   * GET /api/slots/shop
+   */
+  app.get('/api/slots/shop', verifyAuth, async (req: Request, res: Response) => {
+    try {
+      const token = (req as any).token;
+      const user = (req as any).user;
+      const supabase = getSupabase(token);
+
+      // 1. Get the barbershop owned by the user
+      const { data: shop, error: shopError } = await supabase
+        .from('barbershops')
+        .select('id')
+        .eq('owner_id', user.id)
+        .single();
+
+      if (shopError || !shop) return res.status(404).json({ error: 'Barbearia não encontrada' });
+
+      const { data, error } = await supabase
+        .from('slots')
+        .select('*')
+        .eq('barbershop_id', shop.id)
+        .order('start_time', { ascending: true });
+
+      if (error) return res.status(400).json({ error: error.message });
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
+   * 10) Finalizar atendimento / Marcar No-show
    * POST /api/reservations/complete
    */
   app.post('/api/reservations/complete', verifyAuth, async (req: Request, res: Response) => {

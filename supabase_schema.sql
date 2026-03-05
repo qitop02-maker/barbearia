@@ -34,6 +34,7 @@ CREATE TABLE barbershops (
 CREATE TABLE slots (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   barbershop_id UUID REFERENCES barbershops(id) ON DELETE CASCADE NOT NULL,
+  service_name TEXT NOT NULL DEFAULT 'Corte de Cabelo',
   start_time TIMESTAMP WITH TIME ZONE NOT NULL,
   end_time TIMESTAMP WITH TIME ZONE NOT NULL,
   original_price DECIMAL(10,2) NOT NULL,

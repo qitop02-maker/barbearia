@@ -6,10 +6,12 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Slot } from '../types';
 import { DiscountBadge } from '../components/DiscountBadge';
+import { useAuth } from '../lib/AuthContext';
 
 export const SlotDetails: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user, session } = useAuth();
   const [slot, setSlot] = useState<Slot | null>(null);
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(false);
@@ -33,15 +35,22 @@ export const SlotDetails: React.FC = () => {
 
   const handleReserve = async () => {
     if (!slot) return;
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+    
     setBooking(true);
     
     try {
       const response = await fetch('/api/reservations/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
         body: JSON.stringify({
-          slot_id: slot.id,
-          client_id: 'mock-client-id' // In a real app, get from auth
+          slot_id: slot.id
         })
       });
 
@@ -120,6 +129,22 @@ export const SlotDetails: React.FC = () => {
             </div>
           </div>
         </div>
+
+        <section className="mb-8">
+          <h3 className="text-xs font-black text-zinc-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <Scissors size={14} />
+            Serviço
+          </h3>
+          <div className="bg-white border border-zinc-100 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+            <div className="w-10 h-10 bg-zinc-900 rounded-xl flex items-center justify-center text-white shrink-0">
+              <Scissors size={20} />
+            </div>
+            <div>
+              <p className="font-bold text-zinc-900 text-sm">{slot.service_name}</p>
+              <p className="text-xs text-zinc-500">Qualidade garantida</p>
+            </div>
+          </div>
+        </section>
 
         <section className="mb-8">
           <h3 className="text-xs font-black text-zinc-400 uppercase tracking-widest mb-4 flex items-center gap-2">

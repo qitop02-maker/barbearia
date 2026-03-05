@@ -1,31 +1,34 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Calendar, Clock, MapPin, XCircle, CheckCircle2, Scissors, History, User } from 'lucide-react';
+import { Calendar, Clock, MapPin, XCircle, CheckCircle2, Scissors, History, User, LogOut } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Booking } from '../types';
+import { useAuth } from '../lib/AuthContext';
 
 export const ClientDashboard: React.FC = () => {
+  const navigate = useNavigate();
+  const { user, profile, session, signOut, loading: authLoading } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Mock fetching client bookings
+    if (authLoading) return;
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+
     const fetchBookings = async () => {
       try {
-        // In a real app, this would be a specific endpoint for the user
-        const response = await fetch('/api/slots'); // Mocking with slots for now
+        const response = await fetch('/api/reservations/client', {
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`
+          }
+        });
         const data = await response.json();
-        // Transform slots to mock bookings
-        const mockBookings: Booking[] = data.slice(0, 2).map((slot: any, i: number) => ({
-          id: `booking-${i}`,
-          slot_id: slot.id,
-          client_id: 'mock-client-id',
-          status: i === 0 ? 'pending' : 'completed',
-          created_at: new Date().toISOString(),
-          slots: { ...slot, barbershops: slot.barbershops }
-        }));
-        setBookings(mockBookings);
+        setBookings(data);
       } catch (error) {
         console.error('Error fetching bookings:', error);
       } finally {
@@ -34,7 +37,7 @@ export const ClientDashboard: React.FC = () => {
     };
 
     fetchBookings();
-  }, []);
+  }, [user, authLoading, navigate, session]);
 
   const handleCancel = async (id: string) => {
     if (!confirm('Tem certeza que deseja cancelar esta reserva?')) return;
@@ -42,29 +45,53 @@ export const ClientDashboard: React.FC = () => {
     try {
       const response = await fetch('/api/reservations/cancel', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
         body: JSON.stringify({ booking_id: id })
       });
 
       if (response.ok) {
-        setBookings(prev => prev.filter(b => b.id !== id));
+        setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'cancelled' } : b));
         alert('Reserva cancelada com sucesso.');
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Erro ao cancelar');
       }
     } catch (error) {
       console.error('Cancel error:', error);
     }
   };
 
+  if (authLoading || loading) return (
+    <div className="flex items-center justify-center h-[80vh]">
+      <div className="w-8 h-8 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
+    </div>
+  );
+
   return (
     <div className="max-w-md mx-auto px-4 py-8">
-      <div className="flex items-center gap-4 mb-10">
-        <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm">
-          <User size={32} />
+      <div className="flex items-center justify-between mb-10">
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm">
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt={profile.full_name} className="w-full h-full object-cover rounded-2xl" referrerPolicy="no-referrer" />
+            ) : (
+              <User size={32} />
+            )}
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-zinc-900 leading-tight">Olá, {profile?.full_name?.split(' ')[0] || 'Cliente'}</h1>
+            <p className="text-sm text-zinc-500">Gerencie seus agendamentos</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-black text-zinc-900 leading-tight">Olá, Cliente</h1>
-          <p className="text-sm text-zinc-500">Gerencie seus agendamentos</p>
-        </div>
+        <button 
+          onClick={() => { signOut(); navigate('/'); }}
+          className="w-10 h-10 bg-zinc-100 text-zinc-500 rounded-xl flex items-center justify-center hover:bg-zinc-200 transition-colors"
+        >
+          <LogOut size={20} />
+        </button>
       </div>
 
       <section className="mb-10">

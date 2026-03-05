@@ -1,11 +1,16 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Calendar, Clock, Users, Scissors, CheckCircle2, XCircle, TrendingUp, DollarSign, LayoutDashboard, PlusCircle, User } from 'lucide-react';
+import { Plus, Calendar, Clock, Users, Scissors, CheckCircle2, XCircle, TrendingUp, DollarSign, LayoutDashboard, PlusCircle, User, LogOut } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Slot, Booking } from '../types';
+import { Slot, Booking, Barbershop } from '../types';
+import { useAuth } from '../lib/AuthContext';
 
 export const ShopDashboard: React.FC = () => {
+  const navigate = useNavigate();
+  const { user, profile, session, signOut, loading: authLoading } = useAuth();
+  const [shop, setShop] = useState<Barbershop | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -13,26 +18,29 @@ export const ShopDashboard: React.FC = () => {
 
   // Form state
   const [startTime, setStartTime] = useState('');
+  const [serviceName, setServiceName] = useState('Corte de Cabelo');
   const [originalPrice, setOriginalPrice] = useState('');
   const [discountedPrice, setDiscountedPrice] = useState('');
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+
     const fetchData = async () => {
       try {
-        const response = await fetch('/api/slots');
-        const data = await response.json();
-        setSlots(data);
+        const headers = { 'Authorization': `Bearer ${session?.access_token}` };
         
-        // Mock bookings for the shop
-        const mockBookings: Booking[] = data.slice(0, 1).map((slot: any, i: number) => ({
-          id: `booking-shop-${i}`,
-          slot_id: slot.id,
-          client_id: 'client-123',
-          status: 'pending',
-          created_at: new Date().toISOString(),
-          slots: { ...slot, barbershops: slot.barbershops }
-        }));
-        setBookings(mockBookings);
+        // 1. Fetch shop details
+        const shopRes = await fetch('/api/slots/shop', { headers }); 
+        const slotsData = await shopRes.json();
+        setSlots(slotsData);
+
+        const bookingsRes = await fetch('/api/reservations/shop', { headers });
+        const bookingsData = await bookingsRes.json();
+        setBookings(bookingsData);
       } catch (error) {
         console.error('Error fetching shop data:', error);
       } finally {
@@ -41,16 +49,40 @@ export const ShopDashboard: React.FC = () => {
     };
 
     fetchData();
-  }, []);
+  }, [user, authLoading, navigate, session]);
+
+  // We need to get the shop ID. Let's fetch it from Supabase directly in the component for simplicity
+  useEffect(() => {
+    if (!user || !session) return;
+    const fetchShop = async () => {
+      const { getSupabase } = await import('../lib/supabase');
+      const supabase = getSupabase(session.access_token);
+      if (!supabase) return;
+
+      const { data } = await supabase
+        .from('barbershops')
+        .select('*')
+        .eq('owner_id', user.id)
+        .single();
+      setShop(data);
+    };
+    fetchShop();
+  }, [user, session]);
 
   const handleCreateSlot = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!shop) return;
+
     try {
       const response = await fetch('/api/slots/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
         body: JSON.stringify({
-          barbershop_id: 'mock-shop-id', // In real app, get from shop profile
+          barbershop_id: shop.id,
+          service_name: serviceName,
           start_time: new Date(startTime).toISOString(),
           end_time: new Date(new Date(startTime).getTime() + 30 * 60000).toISOString(), // 30 min duration
           original_price: parseFloat(originalPrice),
@@ -76,7 +108,10 @@ export const ShopDashboard: React.FC = () => {
     try {
       const response = await fetch('/api/reservations/checkin', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
         body: JSON.stringify({ booking_id: id })
       });
       if (response.ok) {
@@ -87,24 +122,42 @@ export const ShopDashboard: React.FC = () => {
     }
   };
 
+  if (authLoading || loading) return (
+    <div className="flex items-center justify-center h-[80vh]">
+      <div className="w-8 h-8 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
+    </div>
+  );
+
   return (
     <div className="max-w-md mx-auto px-4 py-8 pb-32">
       <div className="flex items-center justify-between mb-10">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-zinc-900 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-zinc-200">
-            <Scissors size={28} />
+          <div className="w-14 h-14 bg-zinc-900 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-zinc-200 overflow-hidden">
+            {shop?.logo_url ? (
+              <img src={shop.logo_url} alt={shop.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            ) : (
+              <Scissors size={28} />
+            )}
           </div>
           <div>
-            <h1 className="text-xl font-black text-zinc-900 leading-tight">Barbearia Elite</h1>
+            <h1 className="text-xl font-black text-zinc-900 leading-tight">{shop?.name || 'Sua Barbearia'}</h1>
             <p className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">Painel Administrativo</p>
           </div>
         </div>
-        <button 
-          onClick={() => setShowCreate(true)}
-          className="w-12 h-12 bg-emerald-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-100 active:scale-90 transition-all"
-        >
-          <Plus size={24} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setShowCreate(true)}
+            className="w-12 h-12 bg-emerald-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-100 active:scale-90 transition-all"
+          >
+            <Plus size={24} />
+          </button>
+          <button 
+            onClick={() => { signOut(); navigate('/'); }}
+            className="w-12 h-12 bg-zinc-100 text-zinc-500 rounded-2xl flex items-center justify-center hover:bg-zinc-200 transition-colors"
+          >
+            <LogOut size={20} />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-10">
@@ -186,10 +239,10 @@ export const ShopDashboard: React.FC = () => {
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-zinc-900">
-                    {format(new Date(slot.start_time), "HH:mm", { locale: ptBR })}
+                    {slot.service_name}
                   </h4>
                   <p className="text-[10px] text-zinc-400">
-                    {format(new Date(slot.start_time), "dd/MM", { locale: ptBR })}
+                    {format(new Date(slot.start_time), "HH:mm 'em' dd/MM", { locale: ptBR })}
                   </p>
                 </div>
               </div>
@@ -224,6 +277,18 @@ export const ShopDashboard: React.FC = () => {
               <h2 className="text-2xl font-black text-zinc-900 mb-6">Nova Vaga</h2>
               
               <form onSubmit={handleCreateSlot} className="space-y-6">
+                <div>
+                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2 block">Serviço</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ex: Corte de Cabelo"
+                    required
+                    value={serviceName}
+                    onChange={(e) => setServiceName(e.target.value)}
+                    className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl py-4 px-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                  />
+                </div>
+
                 <div>
                   <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2 block">Horário de Início</label>
                   <input 

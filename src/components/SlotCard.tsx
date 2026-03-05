@@ -29,6 +29,7 @@ export const SlotCard: React.FC<SlotCardProps> = ({ slot }) => {
           </div>
           <div>
             <h3 className="font-bold text-zinc-900 leading-tight">{shop?.name || 'Barbearia'}</h3>
+            <p className="text-[10px] text-emerald-600 font-black uppercase tracking-widest mb-1">{slot.service_name}</p>
             <div className="flex items-center gap-1 text-zinc-500 text-xs">
               <MapPin size={12} />
               <span>{shop?.city || 'Cidade'}</span>

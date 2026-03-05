@@ -1,30 +1,46 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-let serviceRoleClient: SupabaseClient | null = null;
+// Detect if we are in a browser or server environment
+const isBrowser = typeof window !== 'undefined';
+
+let supabaseClient: SupabaseClient | null = null;
 
 export function getSupabase(accessToken?: string) {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // In Vite (client), we use import.meta.env
+  // In Node (server), we use process.env
+  const supabaseUrl = isBrowser 
+    ? (import.meta.env.VITE_SUPABASE_URL || '') 
+    : (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '');
+    
+  const supabaseKey = isBrowser
+    ? (import.meta.env.VITE_SUPABASE_ANON_KEY || '')
+    : (accessToken ? (process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY) : process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-  if (!supabaseUrl || !supabaseServiceKey) {
-    console.warn('⚠️ Supabase environment variables are missing. API calls will fail.');
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required. Please configure them in the Secrets panel.');
+  if (!supabaseUrl || !supabaseKey) {
+    const errorMsg = '⚠️ Supabase environment variables are missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.';
+    if (isBrowser) {
+      console.error(errorMsg);
+    } else {
+      console.warn(errorMsg);
+    }
+    return null as any;
   }
 
-  // If an access token is provided, create a client that respects RLS
-  if (accessToken) {
-    return createClient(supabaseUrl, supabaseServiceKey, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+  const options = accessToken ? {
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
       },
-    });
-  }
+    },
+  } : {};
 
-  // Otherwise, return the service role client (bypasses RLS)
-  if (!serviceRoleClient) {
-    serviceRoleClient = createClient(supabaseUrl, supabaseServiceKey);
-  }
-  return serviceRoleClient;
+  return createClient(supabaseUrl, supabaseKey || '', options);
 }
+
+// Singleton for client-side usage - lazy initialized
+export const getClientSupabase = () => {
+  if (!supabaseClient && isBrowser) {
+    supabaseClient = getSupabase();
+  }
+  return supabaseClient;
+};

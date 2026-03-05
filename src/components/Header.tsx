@@ -1,9 +1,11 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Scissors, User, Store, LogIn } from 'lucide-react';
+import { Scissors, User, Store, LogIn, LayoutDashboard } from 'lucide-react';
+import { useAuth } from '../lib/AuthContext';
 
 export const Header: React.FC = () => {
   const location = useLocation();
+  const { user, profile } = useAuth();
   const isAuthPage = location.pathname === '/auth';
 
   return (
@@ -16,17 +18,27 @@ export const Header: React.FC = () => {
       </Link>
 
       {!isAuthPage && (
-        <nav className="flex items-center gap-4">
-          <Link to="/client" className="p-2 text-zinc-500 hover:text-zinc-900 transition-colors">
-            <User size={20} />
-          </Link>
-          <Link to="/shop" className="p-2 text-zinc-500 hover:text-zinc-900 transition-colors">
-            <Store size={20} />
-          </Link>
-          <Link to="/auth" className="flex items-center gap-1.5 bg-zinc-100 px-3 py-1.5 rounded-full text-xs font-bold text-zinc-600">
-            <LogIn size={14} />
-            <span>Entrar</span>
-          </Link>
+        <nav className="flex items-center gap-2">
+          {user ? (
+            <>
+              {profile?.role === 'barbershop' ? (
+                <Link to="/shop" className="flex items-center gap-1.5 bg-zinc-900 px-3 py-1.5 rounded-full text-xs font-bold text-white shadow-lg shadow-zinc-200">
+                  <LayoutDashboard size={14} />
+                  <span>Painel Shop</span>
+                </Link>
+              ) : (
+                <Link to="/client" className="flex items-center gap-1.5 bg-emerald-500 px-3 py-1.5 rounded-full text-xs font-bold text-white shadow-lg shadow-emerald-100">
+                  <User size={14} />
+                  <span>Minhas Reservas</span>
+                </Link>
+              )}
+            </>
+          ) : (
+            <Link to="/auth" className="flex items-center gap-1.5 bg-zinc-100 px-4 py-2 rounded-full text-xs font-bold text-zinc-600 hover:bg-zinc-200 transition-all">
+              <LogIn size={14} />
+              <span>Entrar</span>
+            </Link>
+          )}
         </nav>
       )}
     </header>
