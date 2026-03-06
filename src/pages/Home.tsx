@@ -10,19 +10,35 @@ export const Home: React.FC = () => {
   const [city, setCity] = useState('');
 
   useEffect(() => {
+    const controller = new AbortController();
+    
     const fetchSlots = async () => {
+      setLoading(true);
       try {
-        const response = await fetch(`/api/slots${city ? `?city=${city}` : ''}`);
-        const data = await response.json();
-        setSlots(data);
-      } catch (error) {
-        console.error('Error fetching slots:', error);
+        const response = await fetch(`/api/slots${city ? `?city=${city}` : ''}`, {
+          signal: controller.signal
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setSlots(data);
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('Error fetching slots:', error);
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    fetchSlots();
+    const timeoutId = setTimeout(() => {
+      fetchSlots();
+    }, 300); // Debounce of 300ms
+
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [city]);
 
   return (

@@ -26,6 +26,7 @@ export const ShopDashboard: React.FC = () => {
   const [discountedPrice, setDiscountedPrice] = useState('');
 
   useEffect(() => {
+    let isMounted = true;
     if (authLoading) return;
     if (!user) {
       navigate('/auth');
@@ -36,56 +37,39 @@ export const ShopDashboard: React.FC = () => {
       try {
         const headers = { 'Authorization': `Bearer ${session?.access_token}` };
         
-        // 1. Fetch shop details
-        const shopRes = await fetch('/api/slots/shop', { headers }); 
-        const slotsData = await shopRes.json();
-        setSlots(slotsData);
+        // 1. Fetch shop info
+        const shopRes = await fetch('/api/shop/me', { headers });
+        if (shopRes.ok) {
+          const shopData = await shopRes.json();
+          if (isMounted) setShop(shopData);
+        } else if (shopRes.status === 404) {
+          // Shop not created yet, this is fine
+          if (isMounted) setShop(null);
+        }
 
+        // 2. Fetch slots
+        const slotsRes = await fetch('/api/slots/shop', { headers }); 
+        if (slotsRes.ok) {
+          const slotsData = await slotsRes.json();
+          if (isMounted) setSlots(slotsData);
+        }
+
+        // 3. Fetch bookings
         const bookingsRes = await fetch('/api/reservations/shop', { headers });
-        const bookingsData = await bookingsRes.json();
-        setBookings(bookingsData);
+        if (bookingsRes.ok) {
+          const bookingsData = await bookingsRes.json();
+          if (isMounted) setBookings(bookingsData);
+        }
       } catch (error) {
-        console.error('Error fetching shop data:', error);
+        console.error('[Dashboard] Error fetching data:', error);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     fetchData();
+    return () => { isMounted = false; };
   }, [user, authLoading, navigate, session]);
-
-  // We need to get the shop ID. Let's fetch it from Supabase directly in the component for simplicity
-  useEffect(() => {
-    if (!user || !session) return;
-    const fetchShop = async () => {
-      try {
-        console.log('[Dashboard] Fetching shop for user:', user.id);
-        const { getSupabase } = await import('../lib/supabase');
-        const supabase = getSupabase(session.access_token);
-        if (!supabase) {
-          console.error('[Dashboard] Supabase client not initialized');
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from('barbershops')
-          .select('*')
-          .eq('owner_id', user.id)
-          .single();
-        
-        if (error) {
-          console.error('[Dashboard] Error fetching shop:', error);
-          return;
-        }
-
-        console.log('[Dashboard] Shop loaded:', data);
-        setShop(data);
-      } catch (err) {
-        console.error('[Dashboard] Unexpected error fetching shop:', err);
-      }
-    };
-    fetchShop();
-  }, [user, session]);
 
   const [creating, setCreating] = useState(false);
 

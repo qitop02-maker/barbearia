@@ -19,10 +19,13 @@ export const SlotDetails: React.FC = () => {
   useEffect(() => {
     const fetchSlot = async () => {
       try {
-        const response = await fetch(`/api/slots`);
-        const data = await response.json();
-        const found = data.find((s: Slot) => s.id === id);
-        setSlot(found || null);
+        const response = await fetch(`/api/slots/${id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setSlot(data);
+        } else {
+          setSlot(null);
+        }
       } catch (error) {
         console.error('Error fetching slot:', error);
       } finally {
@@ -30,7 +33,7 @@ export const SlotDetails: React.FC = () => {
       }
     };
 
-    fetchSlot();
+    if (id) fetchSlot();
   }, [id]);
 
   const handleReserve = async () => {

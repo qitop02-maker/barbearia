@@ -182,6 +182,37 @@ async function startServer() {
   });
 
   /**
+   * 2.1) Obter detalhes de uma vaga específica
+   * GET /api/slots/:id
+   */
+  app.get('/api/slots/:id', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const supabase = getSupabase();
+      
+      const { data, error } = await supabase
+        .from('slots')
+        .select(`
+          *,
+          barbershops (
+            name,
+            address,
+            city,
+            logo_url,
+            description
+          )
+        `)
+        .eq('id', id)
+        .single();
+
+      if (error) return res.status(404).json({ error: 'Vaga não encontrada' });
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
    * 3) Reservar vaga (Cliente)
    * POST /api/reservations/create
    */
@@ -372,6 +403,33 @@ async function startServer() {
         .order('start_time', { ascending: true });
 
       if (error) return res.status(400).json({ error: error.message });
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
+   * 9.1) Obter dados da barbearia do usuário logado
+   * GET /api/shop/me
+   */
+  app.get('/api/shop/me', verifyAuth, async (req: Request, res: Response) => {
+    try {
+      const token = (req as any).token;
+      const user = (req as any).user;
+      const supabase = getSupabase(token);
+
+      const { data, error } = await supabase
+        .from('barbershops')
+        .select('*')
+        .eq('owner_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('[API] Error fetching shop info:', error);
+        return res.status(error.code === 'PGRST116' ? 404 : 400).json({ error: error.message });
+      }
+      
       return res.json(data);
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
