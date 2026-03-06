@@ -58,9 +58,20 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Request logger for API
+  app.use('/api', (req, res, next) => {
+    console.log(`[API LOG] ${req.method} ${req.url}`);
+    next();
+  });
+
   // Health check
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', time: new Date().toISOString() });
+    res.json({ 
+      status: 'ok', 
+      time: new Date().toISOString(),
+      env: process.env.NODE_ENV,
+      url: process.env.APP_URL || 'local'
+    });
   });
 
   // --- API ROUTES ---
@@ -403,6 +414,16 @@ async function startServer() {
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
+  });
+
+  // 404 for API routes
+  app.use('/api/*', (req, res) => {
+    console.warn(`[API 404] Route not found: ${req.method} ${req.originalUrl}`);
+    res.status(404).json({ 
+      error: 'Rota da API não encontrada', 
+      path: req.originalUrl,
+      method: req.method 
+    });
   });
 
   // --- VITE MIDDLEWARE / STATIC FILES ---
