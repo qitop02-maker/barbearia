@@ -48,8 +48,11 @@ async function startServer() {
   app.post('/api/slots/create', verifyAuth, async (req: Request, res: Response) => {
     try {
       const token = (req as any).token;
+      const user = (req as any).user;
       const supabase = getSupabase(token);
       const { barbershop_id, service_name, start_time, end_time, original_price, discounted_price } = req.body;
+
+      console.log(`[API] Attempting to create slot for shop ${barbershop_id} by user ${user.id}`);
 
       // RLS will ensure the user owns the barbershop
       const { data, error } = await supabase
@@ -67,9 +70,20 @@ async function startServer() {
         ])
         .select();
 
-      if (error) return res.status(400).json({ error: error.message });
+      if (error) {
+        console.error('[API] Supabase error creating slot:', error);
+        return res.status(400).json({ error: error.message });
+      }
+
+      if (!data || data.length === 0) {
+        console.error('[API] No data returned after slot insertion');
+        return res.status(500).json({ error: 'Falha ao criar vaga: nenhum dado retornado.' });
+      }
+
+      console.log(`[API] Slot created successfully: ${data[0].id}`);
       return res.status(201).json(data[0]);
     } catch (err: any) {
+      console.error('[API] Unexpected error in /api/slots/create:', err);
       return res.status(500).json({ error: err.message });
     }
   });

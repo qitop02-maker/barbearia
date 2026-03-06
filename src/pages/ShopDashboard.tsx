@@ -58,40 +58,115 @@ export const ShopDashboard: React.FC = () => {
   useEffect(() => {
     if (!user || !session) return;
     const fetchShop = async () => {
-      const { getSupabase } = await import('../lib/supabase');
-      const supabase = getSupabase(session.access_token);
-      if (!supabase) return;
+      try {
+        console.log('[Dashboard] Fetching shop for user:', user.id);
+        const { getSupabase } = await import('../lib/supabase');
+        const supabase = getSupabase(session.access_token);
+        if (!supabase) {
+          console.error('[Dashboard] Supabase client not initialized');
+          return;
+        }
 
-      const { data } = await supabase
-        .from('barbershops')
-        .select('*')
-        .eq('owner_id', user.id)
-        .single();
-      setShop(data);
+        const { data, error } = await supabase
+          .from('barbershops')
+          .select('*')
+          .eq('owner_id', user.id)
+          .single();
+        
+        if (error) {
+          console.error('[Dashboard] Error fetching shop:', error);
+          return;
+        }
+
+        console.log('[Dashboard] Shop loaded:', data);
+        setShop(data);
+      } catch (err) {
+        console.error('[Dashboard] Unexpected error fetching shop:', err);
+      }
     };
     fetchShop();
   }, [user, session]);
 
+  const [creating, setCreating] = useState(false);
+
   const handleCreateSlot = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!shop) return;
+    
+    console.log('[Dashboard] Submit triggered');
+
+    if (!session?.access_token) {
+      alert('Sua sessão expirou. Por favor, faça login novamente.');
+      navigate('/auth');
+      return;
+    }
+
+    if (!shop) {
+      alert('Erro: Dados da barbearia não encontrados. Tente recarregar a página.');
+      return;
+    }
+
+    if (!serviceName || !startTime || !originalPrice || !discountedPrice) {
+      alert('Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    const parsePrice = (val: string) => {
+      if (typeof val !== 'string') return 0;
+      return parseFloat(val.replace(',', '.'));
+    };
+
+    const oPrice = parsePrice(originalPrice);
+    const dPrice = parsePrice(discountedPrice);
+
+    if (isNaN(oPrice) || oPrice <= 0) {
+      alert('Preço original inválido. Use apenas números (ex: 50 ou 50.00).');
+      return;
+    }
+
+    if (isNaN(dPrice) || dPrice <= 0) {
+      alert('Preço com desconto inválido. Use apenas números (ex: 35 ou 35.00).');
+      return;
+    }
+
+    if (dPrice >= oPrice) {
+      alert('O preço com desconto deve ser menor que o preço original.');
+      return;
+    }
+
+    setCreating(true);
 
     try {
+      const startDate = new Date(startTime);
+      if (isNaN(startDate.getTime())) {
+        alert('Horário inválido.');
+        setCreating(false);
+        return;
+      }
+
+      const startTimeISO = startDate.toISOString();
+      const endTimeISO = new Date(startDate.getTime() + 30 * 60000).toISOString();
+
+      const payload = {
+        barbershop_id: shop.id,
+        service_name: serviceName,
+        start_time: startTimeISO,
+        end_time: endTimeISO,
+        original_price: oPrice,
+        discounted_price: dPrice
+      };
+
+      console.log('[Dashboard] Sending payload:', payload);
+
       const response = await fetch('/api/slots/create', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`
+          'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({
-          barbershop_id: shop.id,
-          service_name: serviceName,
-          start_time: new Date(startTime).toISOString(),
-          end_time: new Date(new Date(startTime).getTime() + 30 * 60000).toISOString(), // 30 min duration
-          original_price: parseFloat(originalPrice),
-          discounted_price: parseFloat(discountedPrice)
-        })
+        body: JSON.stringify(payload)
       });
+
+      console.log('[Dashboard] Server response status:', response.status);
 
       if (response.ok) {
         const newSlot = await response.json();
@@ -100,10 +175,17 @@ export const ShopDashboard: React.FC = () => {
         setStartTime('');
         setOriginalPrice('');
         setDiscountedPrice('');
-        alert('Vaga criada com sucesso!');
+        alert('Vaga publicada com sucesso!');
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Erro desconhecido no servidor' }));
+        console.error('[Dashboard] Server error data:', errorData);
+        alert(`Erro ao publicar: ${errorData.error || 'Verifique os dados e tente novamente.'}`);
       }
-    } catch (error) {
-      console.error('Create slot error:', error);
+    } catch (error: any) {
+      console.error('[Dashboard] Fetch error:', error);
+      alert(`Erro de conexão: ${error.message || 'Não foi possível contatar o servidor.'}`);
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -415,10 +497,17 @@ export const ShopDashboard: React.FC = () => {
 
                 <button 
                   type="submit"
-                  className="w-full bg-zinc-900 text-white font-black py-4 rounded-2xl shadow-xl shadow-zinc-200 flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                  disabled={creating}
+                  className="w-full bg-zinc-900 text-white font-black py-4 rounded-2xl shadow-xl shadow-zinc-200 flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <PlusCircle size={20} />
-                  Publicar Vaga
+                  {creating ? (
+                    <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <PlusCircle size={20} />
+                      Publicar Vaga
+                    </>
+                  )}
                 </button>
               </form>
             </motion.div>
