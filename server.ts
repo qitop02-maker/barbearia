@@ -75,13 +75,14 @@ async function startServer() {
   });
 
   // --- API ROUTES ---
+  console.log('[SERVER] API Routes initialized');
 
   /**
    * 1) Criar vaga disponível (Barbearia)
    * POST /api/slots/create
    */
   app.post('/api/slots/create', verifyAuth, async (req: Request, res: Response) => {
-    console.log('[API] POST /api/slots/create - Request received');
+    console.log(`[API] POST /api/slots/create - Request from user: ${(req as any).user?.id}`);
     console.log('[API] Body:', JSON.stringify(req.body, null, 2));
     try {
       const token = (req as any).token;

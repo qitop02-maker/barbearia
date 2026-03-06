@@ -132,19 +132,16 @@ export const ShopDashboard: React.FC = () => {
 
       const payload = {
         barbershop_id: shop.id,
-        service_name: serviceName,
+        service_name: serviceName.trim(),
         start_time: startTimeISO,
         end_time: endTimeISO,
-        original_price: oPrice,
-        discounted_price: dPrice
+        original_price: Number(oPrice),
+        discounted_price: Number(dPrice)
       };
 
-      console.log('[Dashboard] Sending payload:', payload);
+      console.log('[Dashboard] Sending payload to /api/slots/create:', payload);
 
-      const apiUrl = '/api/slots/create';
-      console.log(`[Dashboard] Fetching: ${apiUrl}`);
-
-      const response = await fetch(apiUrl, {
+      const response = await fetch('/api/slots/create', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
