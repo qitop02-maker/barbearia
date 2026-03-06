@@ -180,8 +180,14 @@ export const ShopDashboard: React.FC = () => {
         setDiscountedPrice('');
         alert('Vaga publicada com sucesso!');
       } else {
-        const errorData = await response.json().catch(() => ({ error: 'Erro desconhecido no servidor' }));
-        console.error('[Dashboard] Server error data:', errorData);
+        const text = await response.text();
+        console.error('[Dashboard] Server raw response:', text);
+        let errorData;
+        try {
+          errorData = JSON.parse(text);
+        } catch (e) {
+          errorData = { error: `Erro no servidor (${response.status}): ${text.substring(0, 100)}` };
+        }
         alert(`Erro ao publicar: ${errorData.error || 'Verifique os dados e tente novamente.'}`);
       }
     } catch (error: any) {

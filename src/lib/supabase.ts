@@ -39,9 +39,7 @@ export function getSupabase(accessToken?: string) {
 
   if (!supabaseUrl || !supabaseKey) {
     const errorMsg = '⚠️ Supabase environment variables are missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.';
-    if (isBrowser) {
-      console.error(errorMsg);
-    }
+    console.error(errorMsg, { hasUrl: !!supabaseUrl, hasKey: !!supabaseKey });
     return null as any;
   }
 

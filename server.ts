@@ -15,6 +15,7 @@ const __dirname = path.dirname(__filename);
 const verifyAuth = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
+    console.warn('[Auth] No authorization header');
     return res.status(401).json({ error: 'No authorization header' });
   }
 
@@ -22,24 +23,36 @@ const verifyAuth = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const supabase = getSupabase();
     if (!supabase) {
+      console.error('[Auth] Supabase config missing');
       return res.status(500).json({ error: 'Supabase configuration missing on server' });
     }
     const { data: { user }, error } = await supabase.auth.getUser(token);
     
     if (error || !user) {
+      console.warn('[Auth] Invalid token or user not found:', error?.message);
       return res.status(401).json({ error: 'Invalid token' });
     }
 
     // Attach user and token to request
     (req as any).user = user;
     (req as any).token = token;
+    console.log('[Auth] User verified:', user.id);
     next();
-  } catch (err) {
+  } catch (err: any) {
+    console.error('[Auth] Unexpected error:', err);
     return res.status(401).json({ error: 'Auth failed' });
   }
 };
 
 async function startServer() {
+  console.log('[SERVER] Starting server...');
+  console.log('[SERVER] Environment check:', {
+    hasSupabaseUrl: !!process.env.VITE_SUPABASE_URL,
+    hasSupabaseKey: !!process.env.VITE_SUPABASE_ANON_KEY,
+    hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    nodeEnv: process.env.NODE_ENV
+  });
+
   const app = express();
   const PORT = 3000;
 
@@ -58,11 +71,23 @@ async function startServer() {
    */
   app.post('/api/slots/create', verifyAuth, async (req: Request, res: Response) => {
     console.log('[API] POST /api/slots/create - Request received');
+    console.log('[API] Body:', JSON.stringify(req.body, null, 2));
     try {
       const token = (req as any).token;
       const user = (req as any).user;
       const supabase = getSupabase(token);
+      
+      if (!supabase) {
+        console.error('[API] Supabase client could not be initialized');
+        return res.status(500).json({ error: 'Erro de configuração do Supabase no servidor.' });
+      }
+
       const { barbershop_id, service_name, start_time, end_time, original_price, discounted_price } = req.body;
+
+      if (!barbershop_id) {
+        console.error('[API] Missing barbershop_id in request body');
+        return res.status(400).json({ error: 'ID da barbearia é obrigatório.' });
+      }
 
       console.log(`[API] Attempting to create slot for shop ${barbershop_id} by user ${user.id}`);
 
