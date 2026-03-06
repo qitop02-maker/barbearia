@@ -45,6 +45,11 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Health check
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', time: new Date().toISOString() });
+  });
+
   // --- API ROUTES ---
 
   /**
@@ -52,6 +57,7 @@ async function startServer() {
    * POST /api/slots/create
    */
   app.post('/api/slots/create', verifyAuth, async (req: Request, res: Response) => {
+    console.log('[API] POST /api/slots/create - Request received');
     try {
       const token = (req as any).token;
       const user = (req as any).user;
@@ -403,6 +409,12 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
+  });
+
+  // Global error handler
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    console.error('[SERVER ERROR]', err);
+    res.status(500).json({ error: 'Internal Server Error', details: err.message });
   });
 }
 

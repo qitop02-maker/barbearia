@@ -157,7 +157,10 @@ export const ShopDashboard: React.FC = () => {
 
       console.log('[Dashboard] Sending payload:', payload);
 
-      const response = await fetch('/api/slots/create', {
+      const apiUrl = '/api/slots/create';
+      console.log(`[Dashboard] Fetching: ${apiUrl}`);
+
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -182,8 +185,12 @@ export const ShopDashboard: React.FC = () => {
         alert(`Erro ao publicar: ${errorData.error || 'Verifique os dados e tente novamente.'}`);
       }
     } catch (error: any) {
-      console.error('[Dashboard] Fetch error:', error);
-      alert(`Erro de conexão: ${error.message || 'Não foi possível contatar o servidor.'}`);
+      console.error('[Dashboard] Fetch error details:', {
+        message: error.message,
+        stack: error.stack,
+        error
+      });
+      alert(`Erro de conexão: ${error.message || 'Não foi possível contatar o servidor.'}\n\nVerifique se o servidor está rodando e se você tem conexão com a internet.`);
     } finally {
       setCreating(false);
     }
